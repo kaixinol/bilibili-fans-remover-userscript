@@ -20,7 +20,7 @@ export default defineConfig({
         namespace: "bilibili-fans-cleaner-v4",
         version: pkg.version,
         description: "批量移除 B 站粉丝，清理僵尸粉（支持批量移除非互粉用户）",
-        author: "Kaesinol",
+        author: "Kaesinol, aryayaya",
         match: ["https://space.bilibili.com/*"],
         connect: ["api.bilibili.com"],
         grant: ["GM_setValue", "GM_getValue"],
