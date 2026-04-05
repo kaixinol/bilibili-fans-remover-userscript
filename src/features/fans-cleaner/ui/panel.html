@@ -16,25 +16,32 @@
     </header>
 
     <div class="bk-toolbar">
-      <button class="bk-action-btn primary" type="button" @click="refreshCurrentPage()" :disabled="isBusy">
+      <button class="bk-action-btn primary" type="button" @click="refreshCurrentPage()" :disabled="isBusy || actionsDisabled" :title="actionsDisabled ? '仅支持当前登录用户自己的个人空间' : ''">
         刷新列表
       </button>
-      <button class="bk-action-btn warning" type="button" @click="loadAllFans()" :disabled="isBusy">
+      <button class="bk-action-btn warning" type="button" @click="loadAllFans()" :disabled="isBusy || actionsDisabled" :title="actionsDisabled ? '仅支持当前登录用户自己的个人空间' : ''">
         全部加载
       </button>
-      <button class="bk-action-btn secondary" type="button" @click="kickNonMutualFans()" :disabled="isBusy">
+      <button class="bk-action-btn secondary" type="button" @click="kickNonMutualFans()" :disabled="isBusy || actionsDisabled" :title="actionsDisabled ? '仅支持当前登录用户自己的个人空间' : ''">
         移除非互粉
       </button>
-      <button class="bk-action-btn accent" type="button" @click="toggleSelectAll()" :disabled="fans.length === 0 || isBusy">
+      <button class="bk-action-btn accent" type="button" @click="toggleSelectAll()" :disabled="fans.length === 0 || isBusy || actionsDisabled" :title="actionsDisabled ? '仅支持当前登录用户自己的个人空间' : ''">
         全选列表
       </button>
-      <button class="bk-action-btn danger" type="button" @click="kickSelectedFans()" :disabled="selectedFanIds.length === 0 || isBusy">
+      <button class="bk-action-btn danger" type="button" @click="kickSelectedFans()" :disabled="selectedFanIds.length === 0 || isBusy || actionsDisabled" :title="actionsDisabled ? '仅支持当前登录用户自己的个人空间' : ''">
         一键移除
       </button>
       <span class="bk-status-bar" x-text="statusBar"></span>
     </div>
 
     <div class="bk-list" id="bk-list-scroll" @scroll.passive="handleListScroll()">
+      <template x-if="actionsDisabled">
+        <div class="bk-info-card">
+          <h3>仅支持当前登录用户自己的个人空间</h3>
+          <p>当前页面不是当前登录账号的个人空间，面板可查看但操作按钮已禁用。</p>
+        </div>
+      </template>
+
       <template x-if="requiresRiskVerification">
         <div class="bk-alert-card">
           <h3>触发 Bilibili 风控验证 (-352)</h3>

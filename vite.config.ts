@@ -4,15 +4,23 @@ import monkey from "vite-plugin-monkey";
 import pkg from "./package.json";
 
 export default defineConfig({
+  build: {
+    minify: "esbuild",
+    cssMinify: true,
+    sourcemap: false
+  },
+  esbuild: {
+    legalComments: "none"
+  },
   plugins: [
     monkey({
       entry: "src/main.ts",
       userscript: {
-        name: "[Bilibili] 批量移除粉丝",
+        name: "B站批量移除粉丝（支持批量移除非互粉用户）",
         namespace: "bilibili-fans-cleaner-v4",
         version: pkg.version,
-        description: "批量移除 B 站粉丝，清理僵尸粉",
-        author: "Modified based on CKylinMC",
+        description: "批量移除 B 站粉丝，清理僵尸粉（支持批量移除非互粉用户）",
+        author: "Kaesinol",
         match: ["https://space.bilibili.com/*"],
         connect: ["api.bilibili.com"],
         grant: ["GM_setValue", "GM_getValue"],

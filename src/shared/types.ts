@@ -10,6 +10,14 @@ export interface WbiKeys {
   subKey: string;
 }
 
+export interface NavData {
+  mid: number;
+  wbi_img: {
+    img_url: string;
+    sub_url: string;
+  };
+}
+
 export interface FollowersData {
   total: number;
   list: FanItem[];

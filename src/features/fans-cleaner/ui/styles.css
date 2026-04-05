@@ -165,7 +165,8 @@
 }
 
 .bk-empty-state,
-.bk-alert-card {
+.bk-alert-card,
+.bk-info-card {
   margin-top: 10px;
   padding: 18px;
   border-radius: 16px;
@@ -180,6 +181,11 @@
 .bk-alert-card {
   background: rgba(254, 242, 242, 0.96);
   color: #b91c1c;
+}
+
+.bk-info-card {
+  background: rgba(239, 246, 255, 0.96);
+  color: #1d4ed8;
 }
 
 .bk-alert-card a {

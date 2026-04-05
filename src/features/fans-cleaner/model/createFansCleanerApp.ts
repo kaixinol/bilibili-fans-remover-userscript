@@ -19,6 +19,7 @@ type StatusMap = Record<string, ItemStatus>;
 export interface FansCleanerContext {
   mid: string;
   csrf: string;
+  isOwnSpace: boolean;
 }
 
 export interface FansCleanerApp {
@@ -44,6 +45,7 @@ export interface FansCleanerApp {
   visibleStartIndex: number;
   visibleEndIndex: number;
   hasMoreFansToLoad: boolean;
+  readonly actionsDisabled: boolean;
   readonly isBusy: boolean;
   readonly pageInfo: string;
   readonly visibleFans: FanItem[];
@@ -81,12 +83,14 @@ const buildBulkLoadWarning = (totalFans: number, totalPages: number): string =>
   "连续高频请求很容易触发风控，程序会在每次请求间强制等待 1~1.5 秒。\n\n是否继续加载全部？";
 const buildNonMutualWarning = (count: number): string =>
   `即将移除 ${count} 个非互粉粉丝。\n系统会先按节流策略逐个调用移除接口。\n\n确定继续吗？`;
+const ownSpaceOnlyMessage = "仅支持当前登录用户自己的个人空间";
 const getListContainer = (): HTMLElement | null =>
   document.getElementById(LIST_CONTAINER_ID);
 
 export function createFansCleanerApp({
   mid,
-  csrf
+  csrf,
+  isOwnSpace
 }: FansCleanerContext): FansCleanerApp {
   const updateVirtualWindow = (app: FansCleanerApp, resetScroll = false): void => {
     const container = getListContainer();
@@ -182,11 +186,19 @@ export function createFansCleanerApp({
     visibleEndIndex: 0,
     hasMoreFansToLoad: true,
 
+    get actionsDisabled() {
+      return !isOwnSpace;
+    },
+
     get isBusy() {
       return this.loading || this.bulkLoading || this.loadingFollowings || this.removing;
     },
 
     get pageInfo() {
+      if (!isOwnSpace) {
+        return ownSpaceOnlyMessage;
+      }
+
       return this.showingAllFans
         ? `已载入全部 ${this.fans.length} 人，滚动查看预览`
         : `已加载 ${this.fans.length}/${this.totalFans || 0} 人，滚动到底继续加载`;
@@ -207,6 +219,11 @@ export function createFansCleanerApp({
     async togglePanel() {
       this.panelOpen = !this.panelOpen;
 
+      if (this.panelOpen && !isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return;
+      }
+
       if (this.panelOpen && this.fans.length === 0 && !this.loading) {
         await this.loadFans(1);
       } else if (this.panelOpen) {
@@ -219,10 +236,20 @@ export function createFansCleanerApp({
     },
 
     async refreshCurrentPage() {
+      if (!isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return;
+      }
+
       return this.loadFans(1);
     },
 
     async loadFans(page = 1) {
+      if (!isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return;
+      }
+
       this.loading = true;
       this.requiresRiskVerification = false;
       this.errorMessage = "";
@@ -265,6 +292,11 @@ export function createFansCleanerApp({
     },
 
     async loadAllFans() {
+      if (!isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return;
+      }
+
       if (this.totalFans > PAGE_SIZE && !window.confirm(buildBulkLoadWarning(this.totalFans, this.totalPages))) {
         return;
       }
@@ -328,6 +360,11 @@ export function createFansCleanerApp({
     },
 
     async loadAllFollowings() {
+      if (!isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return null;
+      }
+
       if (this.followingMidSet && this.followingMidSet.size > 0) {
         logInfo("复用关注集合缓存", {
           size: this.followingMidSet.size
@@ -373,6 +410,11 @@ export function createFansCleanerApp({
     },
 
     async loadNextFansPage() {
+      if (!isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return;
+      }
+
       if (this.showingAllFans || this.loading || this.bulkLoading || !this.hasMoreFansToLoad) {
         return;
       }
@@ -423,12 +465,22 @@ export function createFansCleanerApp({
     },
 
     toggleSelectAll() {
+      if (!isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return;
+      }
+
       const fanIds = this.fans.map(({ mid: fanMid }) => toFanId(fanMid));
       const allChecked = fanIds.length > 0 && fanIds.every((id) => this.selectedFanIds.includes(id));
       this.selectedFanIds = allChecked ? [] : fanIds;
     },
 
     async kickSelectedFans() {
+      if (!isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return;
+      }
+
       if (this.selectedFanIds.length === 0) {
         window.alert("请先勾选需要移除的粉丝。");
         return;
@@ -442,6 +494,11 @@ export function createFansCleanerApp({
     },
 
     async kickNonMutualFans() {
+      if (!isOwnSpace) {
+        this.statusBar = ownSpaceOnlyMessage;
+        return;
+      }
+
       if (!this.showingAllFans) {
         await this.loadAllFans();
       }
@@ -480,6 +537,10 @@ export function createFansCleanerApp({
     },
 
     async handleListScroll() {
+      if (!isOwnSpace) {
+        return;
+      }
+
       this.resetViewport(false);
 
       const container = getListContainer();
