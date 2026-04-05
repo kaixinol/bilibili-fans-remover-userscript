@@ -1,6 +1,6 @@
 {
   "name": "bilibili-fans-remover-userscript",
-  "version": "1.0.0.post1",
+  "version": "1.0.1",
   "private": true,
   "description": "TypeScript userscript project for removing Bilibili followers in bulk.",
   "packageManager": "pnpm@10.33.0",

@@ -356,7 +356,9 @@ export function createFansCleanerApp({
         replaceFans(this, response.data.list ?? []);
         this.selectedFanIds = [];
         this.nonMutualFanIds = [];
-        this.statusBar = `已加载第 ${page} 页，共 ${this.totalFans} 粉丝`;
+        this.statusBar = this.hasMoreFansToLoad
+          ? `已加载 ${this.fans.length}/${this.totalFans} 粉丝，可继续下滑追加`
+          : `已加载 ${this.totalFans} 粉丝`;
       } catch (error) {
         this.errorMessage = `请求失败: ${normalizeError(error)}`;
         this.statusBar = "请求失败";
