@@ -1,5 +1,9 @@
 # Bilibili Fans Remover Userscript
 
+源代码：<https://github.com/kaixinol/bilibili-fans-remover-userscript>
+
+参考脚本：[aryayaya/561448-bilibili-批量移除粉丝](https://greasyfork.org/zh-CN/scripts/561448-bilibili-%E6%89%B9%E9%87%8F%E7%A7%BB%E9%99%A4%E7%B2%89%E4%B8%9D)
+
 一个用于清理 B 站粉丝的 Userscript 项目。
 
 当前支持：
