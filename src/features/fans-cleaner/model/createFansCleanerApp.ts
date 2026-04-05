@@ -6,10 +6,9 @@ import {
 } from "../../../services/bilibili/api";
 import {
   APP_VERSION,
-  BULK_FETCH_DELAY_MAX_MS,
-  BULK_FETCH_DELAY_MIN_MS,
-  PAGE_SIZE,
-  REMOVE_DELAY_MS
+  DEFAULT_CONFIG,
+  type FansCleanerConfig,
+  setFansCleanerConfig
 } from "../../../shared/config";
 import type { FanItem, ItemStatus, WbiKeys } from "../../../shared/types";
 import { logInfo, normalizeError, randomBetween, sleep } from "../../../shared/utils";
@@ -20,14 +19,17 @@ export interface FansCleanerContext {
   mid: string;
   csrf: string;
   isOwnSpace: boolean;
+  config: FansCleanerConfig;
 }
 
 export interface FansCleanerApp {
   panelOpen: boolean;
+  settingsOpen: boolean;
   loading: boolean;
   bulkLoading: boolean;
   loadingFollowings: boolean;
   removing: boolean;
+  savingSettings: boolean;
   requiresRiskVerification: boolean;
   errorMessage: string;
   statusBar: string;
@@ -45,6 +47,7 @@ export interface FansCleanerApp {
   visibleStartIndex: number;
   visibleEndIndex: number;
   hasMoreFansToLoad: boolean;
+  config: FansCleanerConfig;
   readonly actionsDisabled: boolean;
   readonly isBusy: boolean;
   readonly pageInfo: string;
@@ -53,6 +56,9 @@ export interface FansCleanerApp {
   readonly bottomSpacerHeight: number;
   togglePanel(): Promise<void>;
   closePanel(): void;
+  toggleSettings(): void;
+  saveSettings(): Promise<void>;
+  resetSettings(): Promise<void>;
   refreshCurrentPage(): Promise<void>;
   loadFans(page?: number): Promise<void>;
   loadAllFans(): Promise<void>;
@@ -78,11 +84,20 @@ const LOAD_MORE_THRESHOLD_PX = 320;
 const toFanId = (mid: number | string): string => String(mid);
 const createEmptyStatusMap = (): StatusMap => ({});
 const isRiskControlTriggered = (code: number): boolean => code === RISK_CONTROL_CODE;
-const buildBulkLoadWarning = (totalFans: number, totalPages: number): string =>
+const buildBulkLoadWarning = (
+  totalFans: number,
+  totalPages: number,
+  bulkFetchDelayMinMs: number,
+  bulkFetchDelayMaxMs: number
+): string =>
   `警告：你有 ${totalFans} 个粉丝，需要连续请求 ${totalPages} 次。\n` +
-  "连续高频请求很容易触发风控，程序会在每次请求间强制等待 1~1.5 秒。\n\n是否继续加载全部？";
-const buildNonMutualWarning = (count: number): string =>
-  `即将移除 ${count} 个非互粉粉丝。\n系统会先按节流策略逐个调用移除接口。\n\n确定继续吗？`;
+  `连续高频请求很容易触发风控，程序会在每次请求间强制等待 ${(
+    bulkFetchDelayMinMs / 1000
+  ).toFixed(1)}~${(bulkFetchDelayMaxMs / 1000).toFixed(1)} 秒。\n\n是否继续加载全部？`;
+const buildNonMutualWarning = (count: number, removeDelayMs: number): string =>
+  `即将移除 ${count} 个非互粉粉丝。\n系统会先按节流策略逐个调用移除接口，间隔 ${(
+    removeDelayMs / 1000
+  ).toFixed(1)} 秒。\n\n确定继续吗？`;
 const ownSpaceOnlyMessage = "仅支持当前登录用户自己的个人空间";
 const getListContainer = (): HTMLElement | null =>
   document.getElementById(LIST_CONTAINER_ID);
@@ -90,7 +105,8 @@ const getListContainer = (): HTMLElement | null =>
 export function createFansCleanerApp({
   mid,
   csrf,
-  isOwnSpace
+  isOwnSpace,
+  config
 }: FansCleanerContext): FansCleanerApp {
   const updateVirtualWindow = (app: FansCleanerApp, resetScroll = false): void => {
     const container = getListContainer();
@@ -119,6 +135,21 @@ export function createFansCleanerApp({
 
   const appendFans = (app: FansCleanerApp, nextFans: FanItem[]): void => {
     app.fans = [...app.fans, ...nextFans];
+    updateVirtualWindow(app);
+  };
+
+  const syncLocalStateAfterRemoval = (app: FansCleanerApp, removedIds: string[]): void => {
+    if (removedIds.length === 0) {
+      return;
+    }
+
+    const removedIdSet = new Set(removedIds);
+    app.fans = app.fans.filter(({ mid: fanMid }) => !removedIdSet.has(toFanId(fanMid)));
+    app.selectedFanIds = app.selectedFanIds.filter((fanId) => !removedIdSet.has(fanId));
+    app.nonMutualFanIds = app.nonMutualFanIds.filter((fanId) => !removedIdSet.has(fanId));
+    app.totalFans = Math.max(0, app.totalFans - removedIds.length);
+    app.totalPages = Math.max(1, Math.ceil(app.totalFans / app.config.pageSize));
+    app.hasMoreFansToLoad = !app.showingAllFans && app.currentPage < app.totalPages;
     updateVirtualWindow(app);
   };
 
@@ -153,21 +184,27 @@ export function createFansCleanerApp({
       app.statusBar = `进度: ${index + 1}/${fanIds.length}`;
 
       if (index < fanIds.length - 1) {
-        await sleep(REMOVE_DELAY_MS);
+        await sleep(app.config.removeDelayMs);
       }
     }
 
     app.removing = false;
+    syncLocalStateAfterRemoval(
+      app,
+      fanIds.filter((fanId) => app.statuses[fanId]?.tone === "success")
+    );
+    app.statusBar = `操作完成。成功 ${successCount}，失败 ${failCount}`;
     window.alert(`操作完成。成功: ${successCount}，失败: ${failCount}`);
-    await app.loadFans(1);
   };
 
   return {
     panelOpen: false,
+    settingsOpen: false,
     loading: false,
     bulkLoading: false,
     loadingFollowings: false,
     removing: false,
+    savingSettings: false,
     requiresRiskVerification: false,
     errorMessage: "",
     statusBar: `就绪 v${APP_VERSION}`,
@@ -185,6 +222,7 @@ export function createFansCleanerApp({
     visibleStartIndex: 0,
     visibleEndIndex: 0,
     hasMoreFansToLoad: true,
+    config: { ...config },
 
     get actionsDisabled() {
       return !isOwnSpace;
@@ -233,6 +271,42 @@ export function createFansCleanerApp({
 
     closePanel() {
       this.panelOpen = false;
+      this.settingsOpen = false;
+    },
+
+    toggleSettings() {
+      this.settingsOpen = !this.settingsOpen;
+    },
+
+    async saveSettings() {
+      this.savingSettings = true;
+
+      try {
+        const nextConfig = await setFansCleanerConfig(this.config);
+        this.config = { ...nextConfig };
+        this.statusBar = "设置已保存，后续请求将使用新配置";
+        this.settingsOpen = false;
+      } catch (error) {
+        this.errorMessage = `设置保存失败: ${normalizeError(error)}`;
+        this.statusBar = "设置保存失败";
+      } finally {
+        this.savingSettings = false;
+      }
+    },
+
+    async resetSettings() {
+      this.savingSettings = true;
+
+      try {
+        const nextConfig = await setFansCleanerConfig(DEFAULT_CONFIG);
+        this.config = { ...nextConfig };
+        this.statusBar = "设置已重置为默认值";
+      } catch (error) {
+        this.errorMessage = `设置重置失败: ${normalizeError(error)}`;
+        this.statusBar = "设置重置失败";
+      } finally {
+        this.savingSettings = false;
+      }
     },
 
     async refreshCurrentPage() {
@@ -259,7 +333,7 @@ export function createFansCleanerApp({
 
       try {
         this.wbiKeys ??= await getWbiKeys();
-        const response = await fetchFansPage(mid, page, this.wbiKeys);
+        const response = await fetchFansPage(mid, page, this.wbiKeys, this.config.pageSize);
 
         if (isRiskControlTriggered(response.code)) {
           this.requiresRiskVerification = true;
@@ -277,12 +351,12 @@ export function createFansCleanerApp({
 
         this.currentPage = page;
         this.totalFans = response.data.total;
-        this.totalPages = Math.max(1, Math.ceil(response.data.total / PAGE_SIZE));
+        this.totalPages = Math.max(1, Math.ceil(response.data.total / this.config.pageSize));
         this.hasMoreFansToLoad = this.currentPage < this.totalPages;
         replaceFans(this, response.data.list ?? []);
         this.selectedFanIds = [];
         this.nonMutualFanIds = [];
-        this.statusBar = `已加载第 1 页，共 ${this.totalFans} 粉丝`;
+        this.statusBar = `已加载第 ${page} 页，共 ${this.totalFans} 粉丝`;
       } catch (error) {
         this.errorMessage = `请求失败: ${normalizeError(error)}`;
         this.statusBar = "请求失败";
@@ -297,7 +371,17 @@ export function createFansCleanerApp({
         return;
       }
 
-      if (this.totalFans > PAGE_SIZE && !window.confirm(buildBulkLoadWarning(this.totalFans, this.totalPages))) {
+      if (
+        this.totalFans > this.config.pageSize &&
+        !window.confirm(
+          buildBulkLoadWarning(
+            this.totalFans,
+            this.totalPages,
+            this.config.bulkFetchDelayMinMs,
+            this.config.bulkFetchDelayMaxMs
+          )
+        )
+      ) {
         return;
       }
 
@@ -308,7 +392,7 @@ export function createFansCleanerApp({
 
       try {
         this.wbiKeys ??= await getWbiKeys();
-        const firstPage = await fetchFansPage(mid, 1, this.wbiKeys);
+        const firstPage = await fetchFansPage(mid, 1, this.wbiKeys, this.config.pageSize);
 
         if (isRiskControlTriggered(firstPage.code)) {
           this.requiresRiskVerification = true;
@@ -323,34 +407,51 @@ export function createFansCleanerApp({
         }
 
         const allFans = [...(firstPage.data.list ?? [])];
-        const targetPages = Math.max(1, Math.ceil(firstPage.data.total / PAGE_SIZE));
+        const targetPages = Math.max(1, Math.ceil(firstPage.data.total / this.config.pageSize));
+        let loadedPages = 1;
+        let interruptedByRiskControl = false;
+        let partialFailureMessage = "";
         this.totalFans = firstPage.data.total;
         this.totalPages = targetPages;
 
         for (const page of Array.from({ length: Math.max(0, targetPages - 1) }, (_, index) => index + 2)) {
           this.statusBar = `正在拉取第 ${page} 页...`;
-          await sleep(randomBetween(BULK_FETCH_DELAY_MIN_MS, BULK_FETCH_DELAY_MAX_MS));
+          await sleep(
+            randomBetween(this.config.bulkFetchDelayMinMs, this.config.bulkFetchDelayMaxMs)
+          );
 
-          const response = await fetchFansPage(mid, page, this.wbiKeys);
+          const response = await fetchFansPage(mid, page, this.wbiKeys, this.config.pageSize);
           if (isRiskControlTriggered(response.code)) {
+            interruptedByRiskControl = true;
+            loadedPages = page - 1;
+            this.requiresRiskVerification = true;
+            this.errorMessage = `拉取第 ${page} 页时触发风控，当前只保留前 ${page - 1} 页缓存。`;
             window.alert(`拉取第 ${page} 页时触发了风控拦截，已保留前 ${page - 1} 页数据。`);
             break;
           }
 
           if (response.code !== 0) {
+            loadedPages = page - 1;
+            partialFailureMessage = `拉取第 ${page} 页失败: ${response.message} (${response.code})`;
+            this.errorMessage = partialFailureMessage;
             break;
           }
 
           allFans.push(...(response.data.list ?? []));
+          loadedPages = page;
         }
 
-        this.currentPage = targetPages;
-        this.hasMoreFansToLoad = false;
-        this.showingAllFans = true;
+        this.currentPage = loadedPages;
+        this.hasMoreFansToLoad = loadedPages < targetPages;
+        this.showingAllFans = loadedPages >= targetPages;
         replaceFans(this, allFans, true);
         this.selectedFanIds = [];
         this.nonMutualFanIds = [];
-        this.statusBar = `全量获取完成，共缓存 ${allFans.length} 粉丝`;
+        this.statusBar = interruptedByRiskControl
+          ? `全量拉取被风控中断，已缓存 ${allFans.length}/${this.totalFans} 粉丝`
+          : partialFailureMessage
+            ? `全量拉取中断，已缓存 ${allFans.length}/${this.totalFans} 粉丝`
+            : `全量获取完成，共缓存 ${allFans.length} 粉丝`;
       } catch (error) {
         this.errorMessage = `请求中断: ${normalizeError(error)}`;
         this.statusBar = "请求中断";
@@ -380,10 +481,17 @@ export function createFansCleanerApp({
 
       try {
         this.wbiKeys ??= await getWbiKeys();
-        const response = await loadAllFollowingsSet(mid, this.wbiKeys, async (page, totalPages) => {
-          this.statusBar = `正在拉取全部关注... ${page}/${totalPages}`;
-          await sleep(randomBetween(BULK_FETCH_DELAY_MIN_MS, BULK_FETCH_DELAY_MAX_MS));
-        });
+        const response = await loadAllFollowingsSet(
+          mid,
+          this.wbiKeys,
+          this.config.pageSize,
+          async (page, totalPages) => {
+            this.statusBar = `正在拉取全部关注... ${page}/${totalPages}`;
+            await sleep(
+              randomBetween(this.config.bulkFetchDelayMinMs, this.config.bulkFetchDelayMaxMs)
+            );
+          }
+        );
 
         if (isRiskControlTriggered(response.code)) {
           this.requiresRiskVerification = true;
@@ -431,7 +539,7 @@ export function createFansCleanerApp({
 
       try {
         this.wbiKeys ??= await getWbiKeys();
-        const response = await fetchFansPage(mid, nextPage, this.wbiKeys);
+        const response = await fetchFansPage(mid, nextPage, this.wbiKeys, this.config.pageSize);
 
         if (isRiskControlTriggered(response.code)) {
           this.requiresRiskVerification = true;
@@ -449,7 +557,7 @@ export function createFansCleanerApp({
 
         this.currentPage = nextPage;
         this.totalFans = response.data.total;
-        this.totalPages = Math.max(1, Math.ceil(response.data.total / PAGE_SIZE));
+        this.totalPages = Math.max(1, Math.ceil(response.data.total / this.config.pageSize));
         this.hasMoreFansToLoad = this.currentPage < this.totalPages;
         appendFans(this, response.data.list ?? []);
         this.statusBar = this.hasMoreFansToLoad
@@ -529,7 +637,7 @@ export function createFansCleanerApp({
       }
 
       this.statusBar = `即将移除 ${nonMutualFanIds.length} 个非互粉粉丝`;
-      if (!window.confirm(buildNonMutualWarning(nonMutualFanIds.length))) {
+      if (!window.confirm(buildNonMutualWarning(nonMutualFanIds.length, this.config.removeDelayMs))) {
         return;
       }
 

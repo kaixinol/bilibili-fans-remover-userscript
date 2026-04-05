@@ -15,6 +15,9 @@ export default defineConfig({
     minifySyntax: true,
     minifyWhitespace: true
   },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version)
+  },
   plugins: [
     monkey({
       entry: "src/main.ts",

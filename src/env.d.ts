@@ -17,3 +17,7 @@ declare module "alpinejs" {
   const Alpine: AlpineFactory;
   export default Alpine;
 }
+
+declare const __APP_VERSION__: string;
+declare function GM_getValue<T>(key: string, defaultValue: T): T | Promise<T>;
+declare function GM_setValue<T>(key: string, value: T): void | Promise<void>;

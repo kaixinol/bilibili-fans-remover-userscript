@@ -22,6 +22,9 @@
       <button class="bk-action-btn warning" type="button" @click="loadAllFans()" :disabled="isBusy || actionsDisabled" :title="actionsDisabled ? '仅支持当前登录用户自己的个人空间' : ''">
         全部加载
       </button>
+      <button class="bk-action-btn ghost" type="button" @click="toggleSettings()">
+        设置
+      </button>
       <button class="bk-action-btn secondary" type="button" @click="kickNonMutualFans()" :disabled="isBusy || actionsDisabled" :title="actionsDisabled ? '仅支持当前登录用户自己的个人空间' : ''">
         移除非互粉
       </button>
@@ -33,6 +36,38 @@
       </button>
       <span class="bk-status-bar" x-text="statusBar"></span>
     </div>
+
+    <section class="bk-settings-card" x-show="settingsOpen" x-transition>
+      <div class="bk-settings-grid">
+        <label class="bk-field">
+          <span>每页数量</span>
+          <input type="number" min="1" step="1" x-model.number="config.pageSize" />
+        </label>
+        <label class="bk-field">
+          <span>移除间隔(ms)</span>
+          <input type="number" min="1" step="100" x-model.number="config.removeDelayMs" />
+        </label>
+        <label class="bk-field">
+          <span>批量拉取最短间隔(ms)</span>
+          <input type="number" min="1" step="100" x-model.number="config.bulkFetchDelayMinMs" />
+        </label>
+        <label class="bk-field">
+          <span>批量拉取最长间隔(ms)</span>
+          <input type="number" min="1" step="100" x-model.number="config.bulkFetchDelayMaxMs" />
+        </label>
+      </div>
+      <div class="bk-settings-hint">
+        保存后对后续请求生效，并写入油猴存储。
+      </div>
+      <div class="bk-settings-actions">
+        <button class="bk-action-btn primary" type="button" @click="saveSettings()" :disabled="savingSettings">
+          保存设置
+        </button>
+        <button class="bk-action-btn ghost" type="button" @click="resetSettings()" :disabled="savingSettings">
+          恢复默认
+        </button>
+      </div>
+    </section>
 
     <div class="bk-list" id="bk-list-scroll" @scroll.passive="handleListScroll()">
       <template x-if="actionsDisabled">

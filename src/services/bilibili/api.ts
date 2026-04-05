@@ -1,4 +1,3 @@
-import { PAGE_SIZE } from "../../shared/config";
 import type {
   ApiResponse,
   FollowersData,
@@ -61,13 +60,14 @@ export async function getNavData(): Promise<NavData> {
 export async function fetchFansPage(
   mid: string,
   page: number,
-  wbiKeys: WbiKeys
+  wbiKeys: WbiKeys,
+  pageSize: number
 ): Promise<ApiResponse<FollowersData>> {
   const query = encWbi(
     {
       vmid: mid,
       pn: page,
-      ps: PAGE_SIZE,
+      ps: pageSize,
       order: "desc",
       order_type: "attention"
     },
@@ -79,7 +79,7 @@ export async function fetchFansPage(
     endpoint: "x/relation/followers",
     mid,
     page,
-    pageSize: PAGE_SIZE
+    pageSize
   });
   const response = await fetch(`https://api.bilibili.com/x/relation/followers?${query}`, {
     credentials: "include"
@@ -99,13 +99,14 @@ export async function fetchFansPage(
 export async function fetchFollowingsPage(
   mid: string,
   page: number,
-  wbiKeys: WbiKeys
+  wbiKeys: WbiKeys,
+  pageSize: number
 ): Promise<ApiResponse<FollowingsData>> {
   const query = encWbi(
     {
       vmid: mid,
       pn: page,
-      ps: PAGE_SIZE,
+      ps: pageSize,
       order: "desc",
       order_type: "attention"
     },
@@ -117,7 +118,7 @@ export async function fetchFollowingsPage(
     endpoint: "x/relation/followings",
     mid,
     page,
-    pageSize: PAGE_SIZE
+    pageSize
   });
   const response = await fetch(`https://api.bilibili.com/x/relation/followings?${query}`, {
     credentials: "include",
@@ -140,9 +141,10 @@ export async function fetchFollowingsPage(
 export async function loadAllFollowings(
   mid: string,
   wbiKeys: WbiKeys,
+  pageSize: number,
   onProgress?: (page: number, totalPages: number) => Promise<void> | void
 ): Promise<ApiResponse<Set<string>>> {
-  const firstPage = await fetchFollowingsPage(mid, 1, wbiKeys);
+  const firstPage = await fetchFollowingsPage(mid, 1, wbiKeys, pageSize);
   if (firstPage.code !== 0) {
     return {
       code: firstPage.code,
@@ -152,11 +154,11 @@ export async function loadAllFollowings(
   }
 
   const followingMidSet = new Set((firstPage.data.list ?? []).map((item) => String(item.mid)));
-  const totalPages = Math.max(1, Math.ceil(firstPage.data.total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(firstPage.data.total / pageSize));
 
   for (let page = 2; page <= totalPages; page += 1) {
     await onProgress?.(page, totalPages);
-    const response = await fetchFollowingsPage(mid, page, wbiKeys);
+    const response = await fetchFollowingsPage(mid, page, wbiKeys, pageSize);
 
     if (response.code !== 0) {
       return {

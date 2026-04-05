@@ -2,6 +2,7 @@ import Alpine from "alpinejs";
 
 import { getNavData } from "../services/bilibili/api";
 import { createFansCleanerApp } from "../features/fans-cleaner/model/createFansCleanerApp";
+import { getFansCleanerConfig } from "../shared/config";
 import panelTemplate from "../features/fans-cleaner/ui/panel.html?raw";
 import styles from "../features/fans-cleaner/ui/styles.css?raw";
 import { getCookie, injectStyle, logInfo, parseMidFromLocation } from "../shared/utils";
@@ -22,6 +23,7 @@ export async function mountApp(): Promise<void> {
   }
 
   let isOwnSpace = false;
+  const config = await getFansCleanerConfig();
   try {
     const navData = await getNavData();
     isOwnSpace = String(navData.mid) === mid;
@@ -47,7 +49,7 @@ export async function mountApp(): Promise<void> {
   appRoot.setAttribute("x-data", "fansCleanerApp");
   document.body.appendChild(appRoot);
 
-  Alpine.data("fansCleanerApp", () => createFansCleanerApp({ mid, csrf, isOwnSpace }));
+  Alpine.data("fansCleanerApp", () => createFansCleanerApp({ mid, csrf, isOwnSpace, config }));
   (window as typeof window & { Alpine?: typeof Alpine }).Alpine = Alpine;
   Alpine.start();
 }
