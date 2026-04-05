@@ -1,16 +1,19 @@
 import { defineConfig } from "vite";
-import monkey from "vite-plugin-monkey";
+import monkey, { cdn } from "vite-plugin-monkey";
 
 import pkg from "./package.json";
 
 export default defineConfig({
   build: {
-    minify: "esbuild",
+    minify: false,
     cssMinify: true,
     sourcemap: false
   },
   esbuild: {
-    legalComments: "none"
+    legalComments: "none",
+    minifyIdentifiers: false,
+    minifySyntax: true,
+    minifyWhitespace: true
   },
   plugins: [
     monkey({
@@ -31,7 +34,10 @@ export default defineConfig({
         supportURL: "https://github.com/kaixinol/bilibili-fans-remover-userscript/issues"
       },
       build: {
-        fileName: "bilibili-fans-remover.user.js"
+        fileName: "bilibili-fans-remover.user.js",
+        externalGlobals: {
+          alpinejs: cdn.jsdelivr("Alpine", "dist/cdn.min.js")
+        }
       }
     })
   ]

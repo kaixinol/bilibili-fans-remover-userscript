@@ -43,6 +43,11 @@ dist/bilibili-fans-remover.user.js
 
 将这个文件导入到 Tampermonkey 即可使用。
 
+说明：
+
+- Alpine.js 不再内联到产物中，而是通过 userscript `@require` 外链加载
+- 这样更适合发布到 Greasy Fork 一类对压缩内联库较敏感的平台
+
 ## 开发
 
 安装依赖：
@@ -112,6 +117,7 @@ src/
 - 构建命令：`pnpm build`
 - 输出文件：`dist/bilibili-fans-remover.user.js`
 - 构建阶段会最小化 JS 与 CSS 输出
+- `alpinejs` 通过 `vite-plugin-monkey` 的 `externalGlobals` 自动转换为 `@require`
 
 ### 质量检查
 
