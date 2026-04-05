@@ -24,7 +24,11 @@ export default defineConfig({
         match: ["https://space.bilibili.com/*"],
         connect: ["api.bilibili.com"],
         grant: ["GM_setValue", "GM_getValue"],
-        license: "GPL-3.0"
+        license: "GPL-3.0",
+        noframes: true,
+        icon: "https://www.bilibili.com/favicon.ico",
+        website: "https://github.com/kaixinol/bilibili-fans-remover-userscript",
+        supportURL: "https://github.com/kaixinol/bilibili-fans-remover-userscript/issues"
       },
       build: {
         fileName: "bilibili-fans-remover.user.js"
