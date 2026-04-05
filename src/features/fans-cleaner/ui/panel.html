@@ -17,7 +17,7 @@
 
     <div class="bk-toolbar">
       <button class="bk-action-btn primary" type="button" @click="refreshCurrentPage()" :disabled="isBusy">
-        刷新本页
+        刷新列表
       </button>
       <button class="bk-action-btn warning" type="button" @click="loadAllFans()" :disabled="isBusy">
         全部加载
@@ -34,7 +34,7 @@
       <span class="bk-status-bar" x-text="statusBar"></span>
     </div>
 
-    <div class="bk-list">
+    <div class="bk-list" id="bk-list-scroll" @scroll.passive="handleListScroll()">
       <template x-if="requiresRiskVerification">
         <div class="bk-alert-card">
           <h3>触发 Bilibili 风控验证 (-352)</h3>
@@ -52,7 +52,8 @@
       </template>
 
       <div class="bk-items" x-show="fans.length > 0">
-        <template x-for="fan in fans" :key="fan.mid">
+        <div class="bk-spacer" :style="`height:${topSpacerHeight}px`"></div>
+        <template x-for="fan in visibleFans" :key="fan.mid">
           <label class="bk-item" :class="{ 'is-removed': isRemoved(fan.mid) }">
             <input type="checkbox" :value="String(fan.mid)" x-model="selectedFanIds" />
             <img class="bk-avatar" :src="fan.face" :alt="fan.uname" loading="lazy" />
@@ -63,17 +64,12 @@
             <div class="bk-status" :class="statusToneClass(fan.mid)" :title="statusTitle(fan.mid)" x-text="statusText(fan.mid)"></div>
           </label>
         </template>
+        <div class="bk-spacer" :style="`height:${bottomSpacerHeight}px`"></div>
       </div>
     </div>
 
     <footer class="bk-footer">
-      <button class="bk-page-btn" type="button" @click="prevPage()" :disabled="showingAllFans || currentPage <= 1 || isBusy">
-        &lt; 上一页
-      </button>
       <span class="bk-page-info" x-text="pageInfo"></span>
-      <button class="bk-page-btn" type="button" @click="nextPage()" :disabled="showingAllFans || currentPage >= totalPages || isBusy">
-        下一页 &gt;
-      </button>
     </footer>
   </section>
 </div>

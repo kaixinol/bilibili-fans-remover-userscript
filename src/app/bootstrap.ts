@@ -3,7 +3,7 @@ import Alpine from "alpinejs";
 import { createFansCleanerApp } from "../features/fans-cleaner/model/createFansCleanerApp";
 import panelTemplate from "../features/fans-cleaner/ui/panel.html?raw";
 import styles from "../features/fans-cleaner/ui/styles.css?raw";
-import { getCookie, injectStyle, parseMidFromLocation } from "../shared/utils";
+import { getCookie, injectStyle, logInfo, parseMidFromLocation } from "../shared/utils";
 
 const rootId = "bk-cleaner-root";
 
@@ -16,7 +16,7 @@ export function mountApp(): void {
   const csrf = getCookie("bili_jct");
 
   if (!mid || !csrf) {
-    console.log("[Bilibili Fans Cleaner] 未检测到登录状态或不在个人空间");
+    logInfo("未检测到登录状态或不在个人空间");
     return;
   }
 

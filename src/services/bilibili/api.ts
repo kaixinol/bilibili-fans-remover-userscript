@@ -6,10 +6,14 @@ import type {
   ModifyFanData,
   WbiKeys
 } from "../../shared/types";
+import { logInfo } from "../../shared/utils";
 
 import { encWbi } from "./wbi";
 
 export async function getWbiKeys(): Promise<WbiKeys> {
+  logInfo("API 调用: 获取 WBI keys", {
+    url: "https://api.bilibili.com/x/web-interface/nav"
+  });
   const response = await fetch("https://api.bilibili.com/x/web-interface/nav", {
     credentials: "include",
     cache: "no-store"
@@ -24,6 +28,10 @@ export async function getWbiKeys(): Promise<WbiKeys> {
   };
 
   const { img_url: imageUrl, sub_url: subUrl } = payload.data.wbi_img;
+  logInfo("API 返回: 获取 WBI keys", {
+    imgKey: imageUrl.slice(imageUrl.lastIndexOf("/") + 1, imageUrl.lastIndexOf(".")),
+    subKey: subUrl.slice(subUrl.lastIndexOf("/") + 1, subUrl.lastIndexOf("."))
+  });
 
   return {
     imgKey: imageUrl.slice(imageUrl.lastIndexOf("/") + 1, imageUrl.lastIndexOf(".")),
@@ -48,11 +56,25 @@ export async function fetchFansPage(
     wbiKeys.subKey
   );
 
+  logInfo("API 调用: 获取粉丝列表", {
+    endpoint: "x/relation/followers",
+    mid,
+    page,
+    pageSize: PAGE_SIZE
+  });
   const response = await fetch(`https://api.bilibili.com/x/relation/followers?${query}`, {
     credentials: "include"
   });
 
-  return (await response.json()) as ApiResponse<FollowersData>;
+  const payload = (await response.json()) as ApiResponse<FollowersData>;
+  logInfo("API 返回: 获取粉丝列表", {
+    mid,
+    page,
+    code: payload.code,
+    total: payload.data?.total ?? 0,
+    listCount: payload.data?.list?.length ?? 0
+  });
+  return payload;
 }
 
 export async function fetchFollowingsPage(
@@ -72,6 +94,12 @@ export async function fetchFollowingsPage(
     wbiKeys.subKey
   );
 
+  logInfo("API 调用: 获取关注列表", {
+    endpoint: "x/relation/followings",
+    mid,
+    page,
+    pageSize: PAGE_SIZE
+  });
   const response = await fetch(`https://api.bilibili.com/x/relation/followings?${query}`, {
     credentials: "include",
     headers: {
@@ -79,7 +107,15 @@ export async function fetchFollowingsPage(
     }
   });
 
-  return (await response.json()) as ApiResponse<FollowingsData>;
+  const payload = (await response.json()) as ApiResponse<FollowingsData>;
+  logInfo("API 返回: 获取关注列表", {
+    mid,
+    page,
+    code: payload.code,
+    total: payload.data?.total ?? 0,
+    listCount: payload.data?.list?.length ?? 0
+  });
+  return payload;
 }
 
 export async function loadAllFollowings(
@@ -127,6 +163,11 @@ export async function kickFan(
   fid: string,
   csrf: string
 ): Promise<ApiResponse<ModifyFanData>> {
+  logInfo("API 调用: 移除粉丝", {
+    endpoint: "x/relation/modify",
+    fid,
+    act: 7
+  });
   const body = new URLSearchParams({
     fid,
     act: "7",
@@ -143,5 +184,11 @@ export async function kickFan(
     credentials: "include"
   });
 
-  return (await response.json()) as ApiResponse<ModifyFanData>;
+  const payload = (await response.json()) as ApiResponse<ModifyFanData>;
+  logInfo("API 返回: 移除粉丝", {
+    fid,
+    code: payload.code,
+    message: payload.message
+  });
+  return payload;
 }
