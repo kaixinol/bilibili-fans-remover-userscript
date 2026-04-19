@@ -55,9 +55,18 @@
           <span>批量拉取最长间隔(ms)</span>
           <input type="number" min="1" step="100" x-model.number="config.bulkFetchDelayMaxMs" />
         </label>
+        <label class="bk-field bk-field-full">
+          <span>粉丝查询模式</span>
+          <select x-model="config.fansQueryMode">
+            <option value="attribute">新接口（含关系属性，推荐）</option>
+            <option value="legacy">旧接口（兼容模式）</option>
+          </select>
+        </label>
       </div>
       <div class="bk-settings-hint">
-        保存后对后续请求生效，并写入油猴存储。
+        保存后对后续请求生效，并写入油猴存储。<br/>
+        <strong>新接口模式</strong>：使用 /x/relation/fans，可获取完整粉丝列表（无1000人限制），支持非互粉筛选。<br/>
+        <strong>旧接口模式</strong>：使用 /x/relation/followers，仅返回前1000名粉丝，但也包含关系属性。
       </div>
       <div class="bk-settings-actions">
         <button class="bk-action-btn primary" type="button" @click="saveSettings()" :disabled="savingSettings">

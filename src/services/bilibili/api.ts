@@ -1,7 +1,7 @@
 import type {
   ApiResponse,
+  FansDataWithAttribute,
   FollowersData,
-  FollowingsData,
   ModifyFanData,
   NavData,
   WbiKeys
@@ -75,7 +75,7 @@ export async function fetchFansPage(
     wbiKeys.subKey
   );
 
-  logInfo("API 调用: 获取粉丝列表", {
+  logInfo("API 调用: 获取粉丝列表（旧接口）", {
     endpoint: "x/relation/followers",
     mid,
     page,
@@ -86,7 +86,7 @@ export async function fetchFansPage(
   });
 
   const payload = (await response.json()) as ApiResponse<FollowersData>;
-  logInfo("API 返回: 获取粉丝列表", {
+  logInfo("API 返回: 获取粉丝列表（旧接口）", {
     mid,
     page,
     code: payload.code,
@@ -96,88 +96,48 @@ export async function fetchFansPage(
   return payload;
 }
 
-export async function fetchFollowingsPage(
+export async function fetchFansPageWithAttribute(
   mid: string,
-  page: number,
+  offset: string | null,
   wbiKeys: WbiKeys,
   pageSize: number
-): Promise<ApiResponse<FollowingsData>> {
-  const query = encWbi(
-    {
-      vmid: mid,
-      pn: page,
-      ps: pageSize,
-      order: "desc",
-      order_type: "attention"
-    },
-    wbiKeys.imgKey,
-    wbiKeys.subKey
-  );
+): Promise<ApiResponse<FansDataWithAttribute>> {
+  const params: Record<string, string | number> = {
+    vmid: mid,
+    ps: pageSize
+  };
 
-  logInfo("API 调用: 获取关注列表", {
-    endpoint: "x/relation/followings",
+  if (offset) {
+    params.offset = offset;
+  } else {
+    params.pn = 1;
+  }
+
+  const query = encWbi(params, wbiKeys.imgKey, wbiKeys.subKey);
+
+  logInfo("API 调用: 获取粉丝列表（新接口）", {
+    endpoint: "x/relation/fans",
     mid,
-    page,
+    offset: offset || "首次请求",
     pageSize
   });
-  const response = await fetch(`https://api.bilibili.com/x/relation/followings?${query}`, {
+  const response = await fetch(`https://api.bilibili.com/x/relation/fans?${query}`, {
     credentials: "include",
     headers: {
       Referer: "https://space.bilibili.com/"
     }
   });
 
-  const payload = (await response.json()) as ApiResponse<FollowingsData>;
-  logInfo("API 返回: 获取关注列表", {
+  const payload = (await response.json()) as ApiResponse<FansDataWithAttribute>;
+  logInfo("API 返回: 获取粉丝列表（新接口）", {
     mid,
-    page,
+    offset: offset || "首次请求",
     code: payload.code,
     total: payload.data?.total ?? 0,
-    listCount: payload.data?.list?.length ?? 0
+    listCount: payload.data?.list?.length ?? 0,
+    nextOffset: payload.data?.offset
   });
   return payload;
-}
-
-export async function loadAllFollowings(
-  mid: string,
-  wbiKeys: WbiKeys,
-  pageSize: number,
-  onProgress?: (page: number, totalPages: number) => Promise<void> | void
-): Promise<ApiResponse<Set<string>>> {
-  const firstPage = await fetchFollowingsPage(mid, 1, wbiKeys, pageSize);
-  if (firstPage.code !== 0) {
-    return {
-      code: firstPage.code,
-      message: firstPage.message,
-      data: new Set<string>()
-    };
-  }
-
-  const followingMidSet = new Set((firstPage.data.list ?? []).map((item) => String(item.mid)));
-  const totalPages = Math.max(1, Math.ceil(firstPage.data.total / pageSize));
-
-  for (let page = 2; page <= totalPages; page += 1) {
-    await onProgress?.(page, totalPages);
-    const response = await fetchFollowingsPage(mid, page, wbiKeys, pageSize);
-
-    if (response.code !== 0) {
-      return {
-        code: response.code,
-        message: response.message,
-        data: followingMidSet
-      };
-    }
-
-    for (const item of response.data.list ?? []) {
-      followingMidSet.add(String(item.mid));
-    }
-  }
-
-  return {
-    code: 0,
-    message: "0",
-    data: followingMidSet
-  };
 }
 
 export async function kickFan(

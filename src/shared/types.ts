@@ -5,6 +5,10 @@ export interface FanItem {
   face: string;
 }
 
+export interface FanItemWithAttribute extends FanItem {
+  attribute: number;
+}
+
 export interface WbiKeys {
   imgKey: string;
   subKey: string;
@@ -20,20 +24,13 @@ export interface NavData {
 
 export interface FollowersData {
   total: number;
-  list: FanItem[];
+  list: FanItemWithAttribute[];
 }
 
-export interface FollowingItem {
-  mid: number;
-  attribute: number;
-  uname: string;
-  sign: string;
-  face: string;
-}
-
-export interface FollowingsData {
+export interface FansDataWithAttribute {
   total: number;
-  list: FollowingItem[];
+  list: FanItemWithAttribute[];
+  offset?: string;
 }
 
 export interface ApiResponse<T> {

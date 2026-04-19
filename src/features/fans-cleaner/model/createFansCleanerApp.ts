@@ -1,8 +1,8 @@
 import {
   fetchFansPage,
+  fetchFansPageWithAttribute,
   getWbiKeys,
-  kickFan,
-  loadAllFollowings as loadAllFollowingsSet
+  kickFan
 } from "../../../services/bilibili/api";
 import {
   APP_VERSION,
@@ -10,7 +10,7 @@ import {
   type FansCleanerConfig,
   setFansCleanerConfig
 } from "../../../shared/config";
-import type { FanItem, ItemStatus, WbiKeys } from "../../../shared/types";
+import type { FanItem, FanItemWithAttribute, ItemStatus, WbiKeys } from "../../../shared/types";
 import { logInfo, normalizeError, randomBetween, sleep } from "../../../shared/utils";
 
 type StatusMap = Record<string, ItemStatus>;
@@ -27,7 +27,6 @@ export interface FansCleanerApp {
   settingsOpen: boolean;
   loading: boolean;
   bulkLoading: boolean;
-  loadingFollowings: boolean;
   removing: boolean;
   savingSettings: boolean;
   requiresRiskVerification: boolean;
@@ -43,7 +42,6 @@ export interface FansCleanerApp {
   nonMutualFanIds: string[];
   statuses: StatusMap;
   wbiKeys: WbiKeys | null;
-  followingMidSet: Set<string> | null;
   visibleStartIndex: number;
   visibleEndIndex: number;
   hasMoreFansToLoad: boolean;
@@ -62,7 +60,8 @@ export interface FansCleanerApp {
   refreshCurrentPage(): Promise<void>;
   loadFans(page?: number): Promise<void>;
   loadAllFans(): Promise<void>;
-  loadAllFollowings(): Promise<Set<string> | null>;
+  loadAllFansLegacy(): Promise<void>;
+  loadAllFansWithAttribute(): Promise<void>;
   loadNextFansPage(): Promise<void>;
   toggleSelectAll(): void;
   kickSelectedFans(): Promise<void>;
@@ -202,7 +201,6 @@ export function createFansCleanerApp({
     settingsOpen: false,
     loading: false,
     bulkLoading: false,
-    loadingFollowings: false,
     removing: false,
     savingSettings: false,
     requiresRiskVerification: false,
@@ -218,7 +216,6 @@ export function createFansCleanerApp({
     nonMutualFanIds: [],
     statuses: createEmptyStatusMap(),
     wbiKeys: null,
-    followingMidSet: null,
     visibleStartIndex: 0,
     visibleEndIndex: 0,
     hasMoreFansToLoad: true,
@@ -229,7 +226,7 @@ export function createFansCleanerApp({
     },
 
     get isBusy() {
-      return this.loading || this.bulkLoading || this.loadingFollowings || this.removing;
+      return this.loading || this.bulkLoading || this.removing;
     },
 
     get pageInfo() {
@@ -373,6 +370,14 @@ export function createFansCleanerApp({
         return;
       }
 
+      if (this.config.fansQueryMode === "attribute") {
+        await this.loadAllFansWithAttribute();
+      } else {
+        await this.loadAllFansLegacy();
+      }
+    },
+
+    async loadAllFansLegacy() {
       if (
         this.totalFans > this.config.pageSize &&
         !window.confirm(
@@ -462,60 +467,96 @@ export function createFansCleanerApp({
       }
     },
 
-    async loadAllFollowings() {
-      if (!isOwnSpace) {
-        this.statusBar = ownSpaceOnlyMessage;
-        return null;
+    async loadAllFansWithAttribute() {
+      if (
+        this.totalFans > this.config.pageSize &&
+        !window.confirm(
+          buildBulkLoadWarning(
+            this.totalFans,
+            Math.ceil(this.totalFans / this.config.pageSize),
+            this.config.bulkFetchDelayMinMs,
+            this.config.bulkFetchDelayMaxMs
+          )
+        )
+      ) {
+        return;
       }
 
-      if (this.followingMidSet && this.followingMidSet.size > 0) {
-        logInfo("复用关注集合缓存", {
-          size: this.followingMidSet.size
-        });
-        this.statusBar = `已复用关注缓存，共 ${this.followingMidSet.size} 人`;
-        return this.followingMidSet;
-      }
-
-      this.loadingFollowings = true;
+      this.bulkLoading = true;
       this.requiresRiskVerification = false;
       this.errorMessage = "";
-      this.statusBar = "正在拉取全部关注...";
+      this.statusBar = "起步中，准备全量抓取（新接口）...";
 
       try {
         this.wbiKeys ??= await getWbiKeys();
-        const response = await loadAllFollowingsSet(
-          mid,
-          this.wbiKeys,
-          this.config.pageSize,
-          async (page, totalPages) => {
-            this.statusBar = `正在拉取全部关注... ${page}/${totalPages}`;
+        let offset: string | null = null;
+        const allFans: FanItemWithAttribute[] = [];
+        let requestCount = 0;
+        let interruptedByRiskControl = false;
+        let partialFailureMessage = "";
+
+        while (true) {
+          requestCount += 1;
+          this.statusBar = `正在拉取第 ${requestCount} 批...`;
+
+          const response = await fetchFansPageWithAttribute(
+            mid,
+            offset,
+            this.wbiKeys,
+            this.config.pageSize
+          );
+
+          if (isRiskControlTriggered(response.code)) {
+            interruptedByRiskControl = true;
+            this.requiresRiskVerification = true;
+            this.errorMessage = `拉取第 ${requestCount} 批时触发风控，当前只保留前 ${allFans.length} 个粉丝。`;
+            window.alert(`拉取第 ${requestCount} 批时触发了风控拦截，已保留前 ${allFans.length} 个粉丝数据。`);
+            break;
+          }
+
+          if (response.code !== 0) {
+            partialFailureMessage = `拉取第 ${requestCount} 批失败: ${response.message} (${response.code})`;
+            this.errorMessage = partialFailureMessage;
+            break;
+          }
+
+          const fansList = response.data.list ?? [];
+          allFans.push(...fansList);
+
+          if (requestCount === 1) {
+            this.totalFans = response.data.total;
+          }
+
+          offset = response.data.offset || null;
+
+          if (!offset || fansList.length < this.config.pageSize) {
+            break;
+          }
+
+          if (requestCount < Math.ceil(this.totalFans / this.config.pageSize)) {
             await sleep(
               randomBetween(this.config.bulkFetchDelayMinMs, this.config.bulkFetchDelayMaxMs)
             );
           }
-        );
-
-        if (isRiskControlTriggered(response.code)) {
-          this.requiresRiskVerification = true;
-          this.statusBar = "需要验证";
-          return null;
         }
 
-        if (response.code !== 0) {
-          this.errorMessage = `关注列表获取失败: ${response.message} (${response.code})`;
-          this.statusBar = "请求失败";
-          return null;
-        }
-
-        this.followingMidSet = response.data;
-        this.statusBar = `关注列表获取完成，共 ${response.data.size} 人`;
-        return response.data;
+        this.currentPage = requestCount;
+        this.totalPages = Math.max(1, Math.ceil(this.totalFans / this.config.pageSize));
+        this.hasMoreFansToLoad = false;
+        this.showingAllFans = true;
+        replaceFans(this, allFans, true);
+        this.selectedFanIds = [];
+        this.nonMutualFanIds = [];
+        this.statusBar = interruptedByRiskControl
+          ? `全量拉取被风控中断，已缓存 ${allFans.length}/${this.totalFans} 粉丝`
+          : partialFailureMessage
+            ? `全量拉取中断，已缓存 ${allFans.length}/${this.totalFans} 粉丝`
+            : `全量获取完成，共缓存 ${allFans.length} 粉丝`;
       } catch (error) {
-        this.errorMessage = `关注列表获取失败: ${normalizeError(error)}`;
-        this.statusBar = "请求失败";
-        return null;
+        this.errorMessage = `请求中断: ${normalizeError(error)}`;
+        this.statusBar = "请求中断";
       } finally {
-        this.loadingFollowings = false;
+        this.bulkLoading = false;
       }
     },
 
@@ -609,6 +650,12 @@ export function createFansCleanerApp({
         return;
       }
 
+      if (this.config.fansQueryMode !== "attribute") {
+        this.statusBar = "非互粉筛选仅支持新接口模式";
+        window.alert("请在设置中切换到「新接口（含关系属性）」模式以使用非互粉筛选功能。");
+        return;
+      }
+
       if (!this.showingAllFans) {
         await this.loadAllFans();
       }
@@ -617,16 +664,11 @@ export function createFansCleanerApp({
         return;
       }
 
-      const followingMidSet = await this.loadAllFollowings();
-      if (!followingMidSet) {
-        return;
-      }
-
-      this.statusBar = "正在比对互粉...";
-      const nonMutualFans = this.fans.filter(({ mid: fanMid }) => !followingMidSet.has(toFanId(fanMid)));
-      const nonMutualFanIds = this.fans
-        .map(({ mid: fanMid }) => toFanId(fanMid))
-        .filter((fanId) => !followingMidSet.has(fanId));
+      this.statusBar = "正在筛选非互粉粉丝...";
+      
+      const fansWithAttribute = this.fans as FanItemWithAttribute[];
+      const nonMutualFans = fansWithAttribute.filter((fan) => fan.attribute !== 6);
+      const nonMutualFanIds = nonMutualFans.map(({ mid: fanMid }) => toFanId(fanMid));
 
       this.nonMutualFanIds = nonMutualFanIds;
       this.selectedFanIds = nonMutualFanIds;

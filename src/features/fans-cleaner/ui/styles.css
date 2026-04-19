@@ -188,7 +188,8 @@
   color: #334155;
 }
 
-.bk-field input {
+.bk-field input,
+.bk-field select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid rgba(148, 163, 184, 0.35);
@@ -196,6 +197,10 @@
   background: rgba(255, 255, 255, 0.96);
   color: #0f172a;
   font-size: 13px;
+}
+
+.bk-field-full {
+  grid-column: 1 / -1;
 }
 
 .bk-settings-hint {
