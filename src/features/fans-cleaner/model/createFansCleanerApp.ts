@@ -650,12 +650,7 @@ export function createFansCleanerApp({
         return;
       }
 
-      if (this.config.fansQueryMode !== "attribute") {
-        this.statusBar = "非互粉筛选仅支持新接口模式";
-        window.alert("请在设置中切换到「新接口（含关系属性）」模式以使用非互粉筛选功能。");
-        return;
-      }
-
+      // 加载全部粉丝列表（如果还没加载）
       if (!this.showingAllFans) {
         await this.loadAllFans();
       }
